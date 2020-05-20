@@ -10,10 +10,33 @@ pool:
   vmImage: 'macOS-10.15'
 
 steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
+- script: |
+    OHAI_VERSION=`sed -n '/ohai .[0-9]/{s/.*(//;s/)//;p;}' Gemfile.lock`
+    CHEF_GITSHA=`git rev-parse HEAD`
+    curl -L https://omnitruck.chef.io/install.sh | sudo bash -s -- -c current
+    /opt/chef/bin/chef-client -v
+    /opt/chef/bin/ohai -v
+    /opt/chef/embedded/bin/rake --version
+    /opt/chef/embedded/bin/bundle -v
+    sudo /opt/chef/embedded/bin/gem install appbundler appbundle-updater --no-doc
+    sudo /opt/chef/embedded/bin/appbundle-updater chef ohai v${OHAI_VERSION} --tarball --github chef/ohai
+    # we already have the chef/chef repo checked out in CWD, might be faster to use it
+    sudo /opt/chef/embedded/bin/appbundle-updater chef chef $CHEF_GITSHA --tarball --github chef/chef
+    # sudo /opt/chef/embedded/bin/bundle install
+    # sudo /opt/chef/embedded/bin/rake install
+    # sudo /opt/chef/embedded/bin/appbundler . /opt/chef/bin chef
+    /opt/chef/bin/chef-client -v
+    /opt/chef/bin/ohai -v
+  displayName: 'Install and Upgrade Chef/Ohai'
 
 - script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+    cd kitchen-tests
+    sudo /opt/chef/embedded/bin/gem install berkshelf --no-doc
+    /opt/chef/embedded/bin/berks vendor cookbooks
+    sudo /opt/chef/bin/chef-client -z -o end_to_end --chef-license accept-no-persist
+  displayName: 'Run end_to_end::default recipe'
+
+#- script: |
+#    echo Add other tasks to build, test, and deploy your project.
+#    echo See https://aka.ms/yaml
+#  displayName: 'Run a multi-line script'
